@@ -29,8 +29,8 @@ def require_ffmpeg() -> str:
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise ChoreboxError(
-            "ffmpeg not found on PATH. It's wrapped into chorebox's own Nix "
-            "closure (see flake.nix) — outside Nix, install it yourself."
+            "ffmpeg not found on PATH. chorebox doesn't bundle it — install "
+            "it yourself (e.g. `brew install ffmpeg`)."
         )
     return ffmpeg
 

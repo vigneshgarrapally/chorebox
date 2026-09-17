@@ -27,10 +27,36 @@ That makes this a product, unlike the thing it replaced
 (`home/tools/toolbox` in dotfiles), which was an index of *which tools
 this particular person has* and failed that test by construction.
 
-dotfiles consumes this as a flake input (`inputs.chorebox.url =
-"github:vigneshgarrapally/chorebox"`) from `home/tools/default.nix`, the
-same way it'd consume any other external package. Developed and tested
-here, independently of any `darwin-rebuild`.
+Developed and tested here, independently of any `darwin-rebuild`.
+
+## Packaging: uv, not Nix
+
+Originally packaged as a Nix flake (`pkgs.python3Packages.buildPythonApplication`).
+Switched to a plain `pyproject.toml` + `uv.lock` on 2026-09-17: this is a
+personal CLI, not something that needs bit-for-bit reproducible builds
+across machines, and Nix's syntax/toolchain was overhead relative to `uv`,
+which is what most Python contributors already reach for. Install path is
+now `uv tool install git+https://github.com/vigneshgarrapally/chorebox`
+(or `pip install .`, since it's still a standard package underneath).
+
+This is a real trade-off, not a pure win — two guarantees the Nix build
+gave for free are gone now:
+
+- **`ffmpeg` is no longer pinned/wrapped onto `PATH`.** The old flake's
+  `wrapProgram --prefix PATH` made chorebox self-contained regardless of
+  what the machine had installed — verified at the time by running it
+  with `ffmpeg` stripped from `PATH` entirely. Now it's a documented
+  prerequisite: `require_ffmpeg()` in `paths.py` just checks `PATH` and
+  raises a clear `ChoreboxError` if it's missing. Install it yourself
+  (`brew install ffmpeg`).
+- **Nothing gates "the build" on tests passing.** `nix build` used to
+  fail outright if `pytest` failed, as part of the derivation's check
+  phase. `uv` has no equivalent — that gate now has to live in CI (see
+  Next steps) rather than at install time.
+
+dotfiles' `home/tools/default.nix` still references this repo as a flake
+input from before this switch — that side hasn't been updated yet (see
+Next steps).
 
 ## Architecture
 
@@ -115,15 +141,15 @@ what was actually checked:
   `_prompt_for`/`_run_action` machinery works, not just the individual
   tool functions (those share the same code path as the CLI, already
   covered above).
-- **The Nix build** — `nix build` actually runs all 19 tests as part of
-  the derivation's check phase (confirmed by reading the build log, not
-  assumed from `nativeCheckInputs` being present). A failing test fails
-  `nix build`, which is what makes this gate real rather than decorative.
-  Also confirmed the installed binary works with `ffmpeg` stripped from
-  `PATH` entirely (`env -i PATH=/usr/bin:/bin chorebox yt info ...`
-  still worked) — proving the `wrapProgram --prefix PATH` in `flake.nix`
-  actually does its job, so chorebox doesn't quietly depend on whatever
-  the consuming machine happens to have installed.
+- **The Nix→uv switch (2026-09-17)** — `uv lock` resolved cleanly, `uv
+  sync --group dev` built and installed chorebox into a fresh `.venv`,
+  `uv run pytest` passed all 19 tests, and `uv run chorebox --help`
+  produced the expected subcommand list. This confirms the package is
+  sound under `uv`. It does *not* re-verify the individual tool actions
+  (`yt`, `pdf`, `video`) against real files or re-confirm the
+  `ffmpeg`-stripped-`PATH` case above — that guarantee no longer exists
+  post-switch (see Packaging), and the switch touched packaging only, not
+  the tool code itself.
 - **`convert file`** — deliberately not built. Registered as a stub so
   the gap is visible rather than silent (see Next steps).
 
@@ -138,6 +164,12 @@ what was actually checked:
   Ghostscript. Real compression on text-heavy PDFs, modest on
   image-heavy scans.
 - **`convert file`** is unscoped and unbuilt on purpose (see Next steps).
+- **`ffmpeg` is an unenforced prerequisite**, not a pinned/bundled one.
+  `uv` can't wrap a non-Python system binary onto `PATH` the way the old
+  Nix build did — `require_ffmpeg()` (`paths.py`) just checks and raises
+  a clear error if it's missing. Documented, not a bug, but a genuine
+  regression from the guarantee the Nix build used to provide (see
+  Packaging).
 
 ## Next steps (in the order I'd tackle them)
 
@@ -153,22 +185,29 @@ what was actually checked:
    recompression, behind a flag, since the current default is honest
    about being modest.
 4. **CI.** No GitHub Actions yet. A single job running
-   `nix flake check` (or `nix build`, which already runs pytest) on push
-   would catch regressions before they reach dotfiles' flake.lock.
+   `uv sync --group dev && uv run pytest && uv run ruff check .` on push
+   would catch regressions before they reach dotfiles. This matters more
+   now than it did under Nix — `uv` has no build-time test gate
+   equivalent to `nix build`'s check phase, so without CI nothing blocks
+   a broken commit from landing.
 5. **Repo visibility.** Currently **private**. Flip to public with
    `gh repo edit --visibility public` whenever you want it discoverable
    (matches the `prettymd2pdf` precedent) — nothing here depends on it
    staying private.
-6. **dotfiles-side wiring** — confirm `home/tools/default.nix` in
-   dotfiles actually points at this repo's flake output and that
-   `darwin-rebuild switch` picks it up cleanly on a real machine (the
-   session that built this only verified `nix build` in isolation, not
-   the full darwin-system integration with this exact commit pushed).
+6. **dotfiles-side wiring.** `home/tools/default.nix` in dotfiles still
+   references this repo as a flake input from before the Nix→uv switch.
+   That needs to change to something like a
+   `uv tool install git+https://github.com/vigneshgarrapally/chorebox`
+   step (e.g. in a home-manager activation script) instead. Not started
+   — this repo's side of the switch is done, dotfiles' isn't.
 
 ## Conventions
 
-- `ruff check . && ruff format .` before committing — `pyproject.toml`
-  sets line-length 100, everything else default.
+- `uv run ruff check . && uv run ruff format .` before committing —
+  `pyproject.toml` sets line-length 100, everything else default.
+- Commit `uv.lock` alongside any dependency change in `pyproject.toml` —
+  it's the reproducibility guarantee now that Nix's `flake.lock` is gone.
+  Regenerate it with `uv lock`.
 - Tests are pure-logic only (`timeutil`, `paths`, `vtt_to_txt`, the
   registry contract itself, `cli.build_parser()` wiring). No tests hit
   the network or shell out to `ffmpeg`/`yt-dlp`/`pikepdf` against real

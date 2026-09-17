@@ -9,9 +9,6 @@ description = "Personal CLI for everyday chores — video trimming, transcripts,
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
-# Unpinned on purpose: Nix (flake.nix) is the source of truth for exact
-# versions and is what actually gets installed. This list is here so
-# `pip install .` also works standalone, outside Nix.
 dependencies = [
     "yt-dlp",
     "rich",
@@ -25,7 +22,7 @@ Repository = "https://github.com/vigneshgarrapally/chorebox"
 [project.scripts]
 chorebox = "chorebox.cli:main"
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = ["pytest", "ruff"]
 
 [tool.setuptools.packages.find]

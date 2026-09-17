@@ -21,26 +21,26 @@ chorebox md2pdf convert notes.md                          # bridges to prettymd2
 
 ## Install
 
-Via [Nix](https://nixos.org) (recommended — pins every dependency, including `ffmpeg`):
+Via [uv](https://docs.astral.sh/uv/) (recommended):
 
 ```bash
-nix run github:vigneshgarrapally/chorebox
-# or, to actually install it:
-nix profile install github:vigneshgarrapally/chorebox
+uv tool install git+https://github.com/vigneshgarrapally/chorebox
 ```
 
-It's consumed as a flake input from
-[vigneshgarrapally/dotfiles](https://github.com/vigneshgarrapally/dotfiles)'s
-`home/tools/`, which is how it lands on my own machines.
+Or from a local checkout:
 
-Without Nix:
+```bash
+uv tool install .
+```
+
+Either way, `ffmpeg` needs to already be on your `PATH` yourself (e.g.
+`brew install ffmpeg`) — chorebox doesn't bundle it.
+
+Plain `pip` also works, since it's a regular `pyproject.toml` package:
 
 ```bash
 pip install .
 ```
-
-`ffmpeg` then needs to already be on your `PATH` yourself — the Nix build
-wraps it in automatically (see `flake.nix`); a plain `pip install` can't.
 
 ## What's here today
 
@@ -65,8 +65,7 @@ same registry — it never mentions `yt` or `pdf` by name. Adding a tool is
 one new module plus one import line in `chorebox/tools/__init__.py`;
 `cli.py` doesn't change.
 
-Everything here is Python, so it's one Nix package
-(`pkgs.python3Packages.buildPythonApplication`) with internal modules —
+Everything here is Python, so it's one package with internal modules —
 not the "shell out to a separate binary per tool" pattern you'd need if a
 tool were in a different language (that's what `md2pdf` does, bridging to
 `prettymd2pdf`'s own Node binary, since that one genuinely can't live
@@ -78,19 +77,14 @@ Every action here (trim a video, decrypt a PDF, get a transcript) is
 useful on a machine with zero of my personal config — it's a product, not
 an index of my machine. That's the line: `home/tools/toolbox` in
 dotfiles was retired in favor of this repo for exactly that reason.
-Consumed from dotfiles as a flake input, developed and tested here
-independently of any `darwin-rebuild`.
+Developed and tested here independently of any `darwin-rebuild`.
 
 ## Development
 
 ```bash
-nix develop              # devShell with all deps + pytest + ruff
-pytest                    # 19 tests, pure-logic only — no network, no ffmpeg
-ruff check . && ruff format --check .
-nix build                 # the real thing: runs pytest as a build check,
-                           # then wraps ffmpeg onto PATH — a failing test
-                           # or missing dependency fails the build, not
-                           # just the test suite
+uv sync --group dev       # venv with all deps + pytest + ruff
+uv run pytest             # 19 tests, pure-logic only — no network, no ffmpeg
+uv run ruff check . && uv run ruff format --check .
 ```
 
 ## License
