@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chorebox"
+version = "0.1.0"
+description = "Personal CLI for everyday chores — video trimming, transcripts, PDF cleanup, file conversion — one command, one menu."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+# Unpinned on purpose: Nix (flake.nix) is the source of truth for exact
+# versions and is what actually gets installed. This list is here so
+# `pip install .` also works standalone, outside Nix.
+dependencies = [
+    "yt-dlp",
+    "rich",
+    "questionary",
+    "pikepdf",
+]
+
+[project.urls]
+Repository = "https://github.com/vigneshgarrapally/chorebox"
+
+[project.scripts]
+chorebox = "chorebox.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[tool.setuptools.packages.find]
+include = ["chorebox*"]
+
+[tool.ruff]
+line-length = 100
